@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "project_name": "Person Detection and Zone Alerts",
+  "project_id": "3d06ba94-7af0-4c36-9d76-360c38da2ef9",
+  "pipegen_version": "0.5.1",
+  "exported_at": "2026-10-15T16:33:56Z",
+  "origin": {
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "trt": "10.3.0",
+    "arch": "x86_64",
+    "image": "craftifaidocker/deepstream:7.1-amd64-v3",
+    "gpu_slug": "nvidia-geforce-rtx-4050-laptop-gpu"
+  },
+  "models": [
+    {
+      "name": "yolo11s",
+      "onnx": "models/yolo11s.onnx",
+      "plan": "models/yolo11s.fp32.plan",
+      "precision": "fp32",
+      "workspace_mb": 1024,
+      "builder_optimization_level": 3,
+      "origin_builder_optimization_level": 0,
+      "onnx_sha256": "f8d06a921024c1a46091d48a59a8e377ba189f14250df167fe82f408ca37814b",
+      "plan_sha256": "d10da48d5497de4d47b75297c32469d940c8d13ce9a634c864074ad2393e79f1",
+      "engine_bytes": 48165116,
+      "layer_count": 233
+    }
+  ],
+  "io": {
+    "default_input_kind": "file",
+    "default_input": "Samplevdo.mp4",
+    "supported_inputs": [
+      "file",
+      "rtsp"
+    ],
+    "input_required": true,
+    "output_dir": "out",
+    "has_display_sink": true
+  },
+  "warnings": [
+    "the pipeline read Samplevdo.mp4, which lives outside the project and cannot be shipped \u2014 the recipient must pass --input"
+  ]
+}

@@ -1,0 +1,761 @@
+{
+  "loop": {
+    "next_file": null,
+    "next_task": null,
+    "projectTree": {},
+    "target_function": {
+      "name": "read_file",
+      "parameters": {}
+    },
+    "visited_steps": [
+      "src1/RestrictedAreaMonitoring/application.py",
+      "models/yolo11s.onnx"
+    ]
+  },
+  "pipeline_ir": {
+    "connections": [
+      [
+        "p01o_frame",
+        "p02i_frame"
+      ],
+      [
+        "p01o_frame",
+        "p10i_frame"
+      ],
+      [
+        "p01o_meta",
+        "p07i_meta"
+      ],
+      [
+        "p01o_meta",
+        "p09i_meta"
+      ],
+      [
+        "p02o_blob",
+        "p03i_blob"
+      ],
+      [
+        "p02o_geometry",
+        "p04i_geometry"
+      ],
+      [
+        "p03o_raw",
+        "p04i_raw"
+      ],
+      [
+        "p04o_people",
+        "p05i_people"
+      ],
+      [
+        "p05o_tracks",
+        "p06i_tracks"
+      ],
+      [
+        "p06o_zone",
+        "p07i_zone"
+      ],
+      [
+        "p07o_dwell",
+        "p08i_dwell"
+      ],
+      [
+        "p07o_dwell",
+        "p09i_dwell"
+      ],
+      [
+        "p08o_alerts",
+        "p09i_alerts"
+      ],
+      [
+        "p09o_context",
+        "p10i_context"
+      ],
+      [
+        "p09o_context",
+        "p11i_context"
+      ]
+    ],
+    "nodes": [
+      {
+        "description": "Read every video frame and emit capture timing.",
+        "id": 1,
+        "name": "file",
+        "ports": [
+          {
+            "direction": "output",
+            "format": {
+              "color": "BGR",
+              "encoding": "raw"
+            },
+            "framerate": {
+              "denominator": 50,
+              "numerator": 1503
+            },
+            "id": "p01o_frame",
+            "tensor": {
+              "dtype": "uint8",
+              "shape": [
+                3840,
+                2160,
+                3
+              ]
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p01o_meta",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "cap = cv2.VideoCapture('Videos/Samplevdo.mp4'); assert cap.isOpened(); reported_fps = float(cap.get(cv2.CAP_PROP_FPS)); fps = reported_fps if reported_fps > 0 else 25.0; index = 0\nwhile True:\n    ok, frame = cap.read()\n    if not ok: break\n    position_ms = float(cap.get(cv2.CAP_PROP_POS_MSEC))\n    timestamp_seconds = position_ms / 1000.0 if position_ms > 0 else index / fps\n    capture_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()\n    meta = {'frame_index': index, 'timestamp_seconds': timestamp_seconds, 'capture_utc': capture_utc, 'fps': fps}\n    emit(p01o_frame=frame, p01o_meta=meta)\n    index += 1\ncap.release()",
+        "resolution": [
+          2160,
+          3840
+        ],
+        "type": "input",
+        "url": "file://Videos/Samplevdo.mp4"
+      },
+      {
+        "color_order": "RGB",
+        "description": "Letterbox BGR frames and create normalized RGB tensors.",
+        "id": 2,
+        "mean": null,
+        "normalization": 0.00392156862745098,
+        "offset": null,
+        "pad_value": 114,
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": "BGR",
+              "encoding": "raw"
+            },
+            "framerate": {
+              "denominator": 50,
+              "numerator": 1503
+            },
+            "id": "p02i_frame",
+            "tensor": {
+              "dtype": "uint8",
+              "shape": [
+                3840,
+                2160,
+                3
+              ]
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": "RGB",
+              "encoding": "raw"
+            },
+            "framerate": {
+              "denominator": 50,
+              "numerator": 1503
+            },
+            "id": "p02o_blob",
+            "tensor": {
+              "dtype": "fp32",
+              "shape": [
+                1,
+                3,
+                640,
+                640
+              ]
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p02o_geometry",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "orig_h, orig_w = frame.shape[:2]\nr = min(640 / orig_h, 640 / orig_w)\nnew_w, new_h = round(orig_w * r), round(orig_h * r)\nresized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)\ncanvas = np.full((640, 640, 3), 114, dtype=np.uint8)\npad_x, pad_y = (640 - new_w) // 2, (640 - new_h) // 2\ncanvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = resized\nblob = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0\nblob = np.ascontiguousarray(np.transpose(blob, (2, 0, 1))[None])\ngeometry = {'orig_w': orig_w, 'orig_h': orig_h, 'ratio': r, 'pad_x': pad_x, 'pad_y': pad_y}\nreturn blob, geometry",
+        "resize": [
+          640,
+          640
+        ],
+        "resize_mode": "letterbox",
+        "scale": 0.00392156862745098,
+        "std": null,
+        "type": "preprocess"
+      },
+      {
+        "batchSize": 1,
+        "description": "Run the selected YOLO11s model on each frame.",
+        "id": 3,
+        "layout": "NCHW",
+        "model": {
+          "inputs": [
+            {
+              "dtype": "fp32",
+              "name": "images",
+              "shape": [
+                1,
+                3,
+                640,
+                640
+              ]
+            }
+          ],
+          "name": "YOLO11s COCO person detector",
+          "outputs": [
+            {
+              "dtype": "fp32",
+              "name": "output0",
+              "shape": [
+                1,
+                84,
+                8400
+              ]
+            }
+          ],
+          "parameter_count": 9485791,
+          "type": "engine",
+          "url": "models/yolo11s.fp32.plan",
+          "source_onnx": "models/yolo11s.onnx"
+        },
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": "RGB",
+              "encoding": "raw"
+            },
+            "framerate": {
+              "denominator": 50,
+              "numerator": 1503
+            },
+            "id": "p03i_blob",
+            "tensor": {
+              "dtype": "fp32",
+              "shape": [
+                1,
+                3,
+                640,
+                640
+              ]
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": {
+              "denominator": 50,
+              "numerator": 1503
+            },
+            "id": "p03o_raw",
+            "tensor": {
+              "dtype": "fp32",
+              "shape": [
+                1,
+                84,
+                8400
+              ]
+            }
+          }
+        ],
+        "pseudo_code": "session = ort.InferenceSession('models/yolo11s.onnx', providers=ort.get_available_providers())\nraw = session.run(['output0'], {'images': blob})[0]\nreturn raw",
+        "type": "inference"
+      },
+      {
+        "description": "Decode YOLO boxes, suppress overlaps, retain people.",
+        "id": 4,
+        "label_file_path": null,
+        "num_classes": 80,
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": {
+              "denominator": 50,
+              "numerator": 1503
+            },
+            "id": "p04i_raw",
+            "tensor": {
+              "dtype": "fp32",
+              "shape": [
+                1,
+                84,
+                8400
+              ]
+            }
+          },
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p04i_geometry",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p04o_people",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "preds = np.squeeze(raw, 0).T\nboxes_xywh, scores = preds[:, :4], preds[:, 4:]\nclass_ids = np.argmax(scores, axis=1)\nconfidences = scores[np.arange(scores.shape[0]), class_ids]\nkeep = confidences >= 0.35\nboxes_xywh, confidences, class_ids = boxes_xywh[keep], confidences[keep], class_ids[keep]\npeople = []\nif len(boxes_xywh) == 0: return people\ncx, cy, w, h = boxes_xywh.T\nx1 = np.clip((cx - w / 2 - geometry['pad_x']) / geometry['ratio'], 0, geometry['orig_w'])\ny1 = np.clip((cy - h / 2 - geometry['pad_y']) / geometry['ratio'], 0, geometry['orig_h'])\nx2 = np.clip((cx + w / 2 - geometry['pad_x']) / geometry['ratio'], 0, geometry['orig_w'])\ny2 = np.clip((cy + h / 2 - geometry['pad_y']) / geometry['ratio'], 0, geometry['orig_h'])\n# The source takes argmax over all 80 COCO scores before filtering for person (class 0).\nidxs = np.where(class_ids == 0)[0]\nif len(idxs):\n    rects = np.stack([x1[idxs], y1[idxs], (x2 - x1)[idxs], (y2 - y1)[idxs]], axis=1)\n    selected = cv2.dnn.NMSBoxes(rects.tolist(), confidences[idxs].tolist(), 0.35, 0.45)\n    selected = np.array(selected).flatten() if len(selected) else []\n    for i in selected:\n        oi = idxs[i]\n        people.append({'box': [float(x1[oi]), float(y1[oi]), float(x2[oi]), float(y2[oi])], 'score': float(confidences[oi]), 'class': 'person'})\nreturn people",
+        "task": "detection",
+        "threshold": 0.35,
+        "top_items": null,
+        "type": "postprocess"
+      },
+      {
+        "category": "tracking",
+        "description": "Associate observed people with persistent IoU-based track IDs.",
+        "external_assets": [],
+        "id": 5,
+        "inputs": [
+          "person detections"
+        ],
+        "name": "person tracking",
+        "outputs": [
+          "current person tracks"
+        ],
+        "parameters": {
+          "iou_threshold": 0.3,
+          "max_age": 15,
+          "trail_length": 30
+        },
+        "placement": {
+          "attach_point": null,
+          "position": "post_nn"
+        },
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p05i_people",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p05o_tracks",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "def iou(a, b):\n    ax1, ay1, ax2, ay2 = a; bx1, by1, bx2, by2 = b\n    ix1, iy1 = max(ax1, bx1), max(ay1, by1)\n    ix2, iy2 = min(ax2, bx2), min(ay2, by2)\n    inter = max(0, ix2-ix1) * max(0, iy2-iy1)\n    area_a = max(0, ax2-ax1) * max(0, ay2-ay1)\n    area_b = max(0, bx2-bx1) * max(0, by2-by1)\n    union = area_a + area_b - inter\n    return inter / union if union > 0 else 0.0\n# Persistent per-input state: tracks = []; next_id = 1.\ndef new_track(det, track_id):\n    box = det['box']\n    center = (int((box[0]+box[2])/2), int((box[1]+box[3])/2))\n    return {'id': track_id, 'box': box, 'score': det['score'], 'misses': 0, 'hits': 1, 'trail': [center]}\nif not tracks:\n    for det in people:\n        tracks.append(new_track(det, next_id)); next_id += 1\nelse:\n    if people:\n        cost = np.zeros((len(tracks), len(people)))\n        for i, trk in enumerate(tracks):\n            for j, det in enumerate(people): cost[i, j] = 1 - iou(trk['box'], det['box'])\n        row_idx, col_idx = scipy.optimize.linear_sum_assignment(cost)\n    else:\n        row_idx, col_idx = np.array([], dtype=int), np.array([], dtype=int)\n    matched_tracks, matched_dets = set(), set()\n    for r, c in zip(row_idx, col_idx):\n        if 1 - cost[r, c] >= 0.3:\n            trk, det = tracks[r], people[c]\n            trk['box'], trk['score'] = det['box'], det['score']\n            trk['hits'] += 1; trk['misses'] = 0\n            box = trk['box']\n            trk['trail'].append((int((box[0]+box[2])/2), int((box[1]+box[3])/2)))\n            trk['trail'] = trk['trail'][-30:]\n            matched_tracks.add(r); matched_dets.add(c)\n    for i, trk in enumerate(tracks):\n        if i not in matched_tracks: trk['misses'] += 1\n    for j, det in enumerate(people):\n        if j not in matched_dets:\n            tracks.append(new_track(det, next_id)); next_id += 1\n    tracks = [trk for trk in tracks if trk['misses'] <= 15]\n# Retain missed tracks for association, but emit only current observations.\nreturn [dict(trk) for trk in tracks if trk['misses'] == 0]",
+        "reference_path": null,
+        "runs_every_frame": true,
+        "state_key": "global",
+        "triggers": [],
+        "type": "custom"
+      },
+      {
+        "category": "gating",
+        "description": "Test tracked foot points and report zone entries.",
+        "external_assets": [],
+        "id": 6,
+        "inputs": [
+          "current person tracks"
+        ],
+        "name": "restricted-zone entry",
+        "outputs": [
+          "zone membership and transitions"
+        ],
+        "parameters": {
+          "frame_size_pixels": [
+            2160,
+            3840
+          ],
+          "method": "Zone membership",
+          "region_polygon_pixels": [
+            [
+              600,
+              1400
+            ],
+            [
+              1560,
+              1400
+            ],
+            [
+              1560,
+              2800
+            ],
+            [
+              600,
+              2800
+            ]
+          ],
+          "rules": [
+            {
+              "from": "outside",
+              "name": "entry_transition",
+              "to": "inside"
+            }
+          ]
+        },
+        "placement": {
+          "attach_point": null,
+          "position": "post_tracker"
+        },
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p06i_tracks",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p06o_zone",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "polygon = np.array(parameters['region_polygon_pixels'], dtype=np.float32)\nresult = []\n# previous_zone is persistent per track ID; a newly observed ID starts outside.\nfor trk in tracks:\n    x1, y1, x2, y2 = trk['box']\n    foot = ((x1 + x2) / 2, y2)\n    inside = cv2.pointPolygonTest(polygon, foot, False) >= 0\n    zone = 'Restricted Area' if inside else None\n    old = previous_zone.get(trk['id'])\n    transition = 'entry' if old is None and zone is not None else ('exit' if old is not None and zone is None else None)\n    previous_zone[trk['id']] = zone\n    result.append({'track': trk, 'zone': zone, 'transition': transition})\nreturn {'observations': result, 'polygon': parameters['region_polygon_pixels']}",
+        "reference_path": null,
+        "runs_every_frame": true,
+        "state_key": "track_id",
+        "triggers": [],
+        "type": "custom"
+      },
+      {
+        "category": "state_estimation",
+        "description": "Accumulate observed in-zone frames for each visit.",
+        "external_assets": [],
+        "id": 7,
+        "inputs": [
+          "zone membership and transitions",
+          "source timing"
+        ],
+        "name": "restricted-zone dwell time",
+        "outputs": [
+          "per-visit dwell observations"
+        ],
+        "parameters": {
+          "method": "Dwell time"
+        },
+        "placement": {
+          "attach_point": null,
+          "position": "post_tracker"
+        },
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p07i_zone",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p07i_meta",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p07o_dwell",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "# Persistent records are keyed by track ID. FPS converts observed frames to seconds, as in the source.\n# Keep a separate visit counter so the requested entry-to-exit dwell resets on exit.\nobservations = []\nfor item in zone_data['observations']:\n    trk, zone, transition = item['track'], item['zone'], item['transition']\n    tid = trk['id']\n    if tid not in records:\n        records[tid] = {'frames_in_zone': 0, 'visit_frames': 0, 'streak': 0, 'peak_streak': 0, 'last_zone_name': None, 'visit_number': 0}\n    rec = records[tid]\n    if transition == 'entry':\n        rec['visit_frames'] = 0\n        rec['visit_number'] += 1\n    if zone is not None:\n        rec['frames_in_zone'] += 1\n        rec['visit_frames'] += 1\n        rec['streak'] += 1\n        rec['last_zone_name'] = zone\n    else:\n        rec['streak'] = 0\n    rec['peak_streak'] = max(rec['peak_streak'], rec['streak'])\n    visit_dwell = rec['visit_frames'] / source_meta['fps']\n    observations.append({'track': trk, 'zone': zone, 'transition': transition, 'visit_number': rec['visit_number'], 'dwell_time_seconds': visit_dwell, 'cumulative_zone_seconds': rec['frames_in_zone'] / source_meta['fps']})\n    if transition == 'exit': rec['visit_frames'] = 0\nreturn {'observations': observations, 'polygon': zone_data['polygon']}",
+        "reference_path": null,
+        "runs_every_frame": true,
+        "state_key": "track_id",
+        "triggers": [],
+        "type": "custom"
+      },
+      {
+        "category": "state_estimation",
+        "description": "Raise one incident when visit dwell reaches threshold.",
+        "external_assets": [],
+        "id": 8,
+        "inputs": [
+          "per-visit dwell observations"
+        ],
+        "name": "dwell-time incident alert",
+        "outputs": [
+          "incident events and current alert status"
+        ],
+        "parameters": {
+          "dwell_alert_threshold_seconds": 2.0,
+          "method": "Compare restricted-zone dwell time with the configured…"
+        },
+        "placement": {
+          "attach_point": null,
+          "position": "post_tracker"
+        },
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p08i_dwell",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p08o_alerts",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "events = []\nannotated = []\nthreshold = parameters['dwell_alert_threshold_seconds']\n# alerted_visits persists for the input stream and prevents repeated incidents per visit.\nfor item in dwell_data['observations']:\n    tid = item['track']['id']\n    key = (tid, item['visit_number'])\n    active = item['zone'] is not None and item['dwell_time_seconds'] >= threshold\n    if active and key not in alerted_visits:\n        alerted_visits.add(key)\n        events.append({'track_id': tid, 'zone': item['zone'], 'dwell_time_seconds': item['dwell_time_seconds'], 'visit_number': item['visit_number']})\n    annotated.append({**item, 'alert_active': active})\nreturn {'observations': annotated, 'polygon': dwell_data['polygon'], 'events': events}",
+        "reference_path": null,
+        "runs_every_frame": true,
+        "state_key": "track_id",
+        "triggers": [],
+        "type": "custom"
+      },
+      {
+        "category": "other",
+        "description": "Attach source timestamps and available snapshot references.",
+        "external_assets": [],
+        "id": 9,
+        "inputs": [
+          "incident events and status",
+          "per-visit dwell observations",
+          "source timing"
+        ],
+        "name": "timestamped incident record",
+        "outputs": [
+          "frame context and timestamped incident records"
+        ],
+        "parameters": {
+          "method": "Create a record for each dwell-time incident"
+        },
+        "placement": {
+          "attach_point": null,
+          "position": "post_tracker"
+        },
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p09i_alerts",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p09i_dwell",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p09i_meta",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          },
+          {
+            "direction": "output",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p09o_context",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "assert len(alert_data['observations']) == len(dwell_data['observations'])\nincident_records = []\nfor event in alert_data['events']:\n    incident_records.append({'timestamp': source_meta['capture_utc'], 'timestamp_seconds': source_meta['timestamp_seconds'], 'frame_index': source_meta['frame_index'], 'track_id': event['track_id'], 'zone': event['zone'], 'dwell_time_seconds': event['dwell_time_seconds'], 'snapshot_reference': None})\nreturn {'frame_index': source_meta['frame_index'], 'timestamp_seconds': source_meta['timestamp_seconds'], 'observations': alert_data['observations'], 'polygon': alert_data['polygon'], 'incident_records': incident_records}",
+        "reference_path": null,
+        "runs_every_frame": true,
+        "state_key": "none",
+        "triggers": [],
+        "type": "custom"
+      },
+      {
+        "description": "Display original-sized frames with boxes and incidents.",
+        "grid": null,
+        "id": 10,
+        "name": "display",
+        "output_type": "single",
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": "BGR",
+              "encoding": "raw"
+            },
+            "framerate": {
+              "denominator": 50,
+              "numerator": 1503
+            },
+            "id": "p10i_frame",
+            "tensor": {
+              "dtype": "uint8",
+              "shape": [
+                3840,
+                2160,
+                3
+              ]
+            }
+          },
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p10i_context",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "out = frame.copy()\nh, w = out.shape[:2]\nscale = w / 1400\nbox_thick = max(2, int(3 * scale))\nlabel_scale = max(0.8, 1.1 * scale)\nlabel_thick = max(1, int(2 * scale))\ncv2.polylines(out, [np.array(context['polygon'], dtype=np.int32)], True, (0, 0, 255), max(2, int(4 * scale)))\nfor item in context['observations']:\n    trk = item['track']\n    color = (0, 0, 255) if item['alert_active'] else ((0, 140, 255) if item['zone'] else (0, 200, 0))\n    x1, y1, x2, y2 = map(int, trk['box'])\n    cv2.rectangle(out, (x1, y1), (x2, y2), color, box_thick)\n    status = f\"INTRUSION! {item['dwell_time_seconds']:.1f}s\" if item['alert_active'] else (f\"IN ZONE {item['dwell_time_seconds']:.1f}s\" if item['zone'] else 'CLEAR')\n    label = f\"ID {trk['id']} {status}\"\n    (tw, th), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, label_scale, label_thick)\n    label_y = max(th + baseline + 8, y1)\n    cv2.rectangle(out, (x1, label_y-th-baseline-8), (x1+tw+12, label_y), color, -1)\n    cv2.putText(out, label, (x1+6, label_y-baseline-3), cv2.FONT_HERSHEY_SIMPLEX, label_scale, (0, 0, 0), label_thick, cv2.LINE_AA)\ncv2.imshow('Restricted-zone intrusion', out)\ncv2.waitKey(1)",
+        "resolution": [
+          2160,
+          3840
+        ],
+        "type": "output",
+        "url": null
+      },
+      {
+        "description": "Write actual timestamped incidents into one JSON file.",
+        "grid": null,
+        "id": 11,
+        "name": "json",
+        "output_type": "single",
+        "ports": [
+          {
+            "direction": "input",
+            "format": {
+              "color": null,
+              "encoding": null
+            },
+            "framerate": null,
+            "id": "p11i_context",
+            "tensor": {
+              "dtype": null,
+              "shape": null
+            }
+          }
+        ],
+        "pseudo_code": "path = 'output/metadata.json'\nos.makedirs(os.path.dirname(path), exist_ok=True)\n# Open once, before the first frame; an empty run remains a valid empty array.\nf = open(path, 'w', encoding='utf-8'); f.write('['); first_record = True\nfor record in context['incident_records']:\n    if not first_record: f.write(',\\n')\n    json.dump(record, f, ensure_ascii=False)\n    first_record = False\nf.flush()\n# On end of stream: f.write(']\\n'); f.close().",
+        "resolution": null,
+        "type": "output",
+        "url": "file://output/metadata.json"
+      }
+    ]
+  }
+}
